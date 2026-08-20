@@ -1,228 +1,72 @@
 import json
-import httpx
+import os
+from dotenv import load_dotenv
+from google import genai
+from google.genai import types
+from app.schemas import SensorOutput
 
+load_dotenv()
 from app.config import (
-    OLLAMA_URL,
-    OLLAMA_MODEL
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    GOOGLE_SEARCH_ENABLED
 )
-
-
-def fallback_insight(payload):
-
-    brand = payload.get(
-        "brand",
-        ""
-    )
-
-    category = payload.get(
-        "category",
-        ""
-    )
-
-    signals = payload.get(
-        "signals",
-        {}
-    )
-
-    score = signals.get(
-        "opportunity_score",
-        0
-    )
-
-    return {
-
-        "summary":
-            f"Monitoring signals for "
-            f"{brand} in the {category} category.",
-
-        "signals": [
-
-            {
-                "signal_type":
-                    "consumer_conversation",
-
-                "topic":
-                    category,
-
-                "opportunity_score":
-                    score,
-
-                "confidence":
-                    "LOW",
-
-                "insight":
-                    "Insufficient AI analysis available."
-            }
-        ],
-
-        "overall_assessment": {
-
-            "opportunity_score":
-                score,
-
-            "urgency":
-                "MEDIUM",
-
-            "recommendation":
-                "Continue monitoring emerging conversations."
-        }
-    }
-
-
-async def generate_insight(
-    payload
-):
-
-    # ==================================================
-    # LLM PROMPT
-    # ==================================================
+async def generate_insight(context):
+    key = GEMINI_API_KEY
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY is missing. Add it to .env.")
 
     prompt = f"""
-You are an FMCG social intelligence analyst.
+You are an FMCG social trend intelligence engine.
 
-Your job is to analyze online signals around a brand
-and identify important consumer and cultural opportunities.
+Brand: {context["brand"]}
+Category: {context["category"]}
+Market: {context["market"]}
+Lookback: approximately {context["lookback_days"]} days
 
-IMPORTANT:
+Use current web information and identify the most relevant CURRENT
+trends, events, cultural moments, consumer conversations, sports
+moments, news and emerging topics that could create a legitimate
+social opportunity for the brand.
 
-The user has ONLY provided:
+Do NOT generate posts, captions, taglines or creative concepts.
+Return exactly 5 distinct opportunities.
 
-- Brand
-- Category
-- Market
-
-You must DISCOVER potential signals from the evidence.
-
-Do NOT assume that the user supplied an event.
-
-Possible signal types include:
-
-1. emerging_trend
-2. real_time_moment
-3. consumer_conversation
-4. cultural_event
-5. competitor_activity
-6. product_conversation
-7. brand_reputation
-8. campaign_activity
-
-A real-time moment could be something such as:
-
-- sports event
-- celebrity moment
-- breaking news
-- cultural event
-- viral incident
-- festival
-- live broadcast moment
-
-But ONLY classify something as a real-time moment
-if the supplied evidence supports it.
-
-Do NOT invent facts.
-
-Do NOT create:
-
-- captions
-- social media posts
-- image concepts
-- ad copy
-- creative briefs
-
-We are ONLY generating intelligence.
-
-Return ONLY valid JSON.
-
-Use this structure:
-
-{{
-    "summary": "...",
-
-    "signals": [
-
-        {{
-            "signal_type": "...",
-
-            "topic": "...",
-
-            "evidence": [
-                "..."
-            ],
-
-            "consumer_reaction": "...",
-
-            "brand_relevance": 0,
-
-            "opportunity_score": 0,
-
-            "confidence": "LOW|MEDIUM|HIGH",
-
-            "insight": "..."
-        }}
-    ],
-
-    "overall_assessment": {{
-
-        "opportunity_score": 0,
-
-        "urgency": "LOW|MEDIUM|HIGH",
-
-        "recommendation": "..."
-    }}
-}}
-
-DATA:
-
-{json.dumps(
-    payload,
-    indent=2
-)}
+Prefer specific timely trends over generic statements. Do not force
+brand connections. Do not invent sponsorships, partnerships or claims.
+Lower confidence when evidence is weak. Rank opportunities strongest
+to weakest. Evidence must contain concise factual observations.
 """
 
-    body = {
+    client = genai.Client(api_key=key)
+    response = await client.aio.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+            response_mime_type="application/json",
+            response_schema=SensorOutput,
+            temperature=0.2,
+        ),
+    )
 
-        "model":
-            OLLAMA_MODEL,
+    print(response)
 
-        "prompt":
-            prompt,
+    parsed = response.parsed
+    if parsed is None:
+        parsed = SensorOutput.model_validate(json.loads(response.text))
 
-        "stream":
-            False,
-
-        "format":
-            "json"
-    }
-
-    # ==================================================
-    # CALL OLLAMA
-    # ==================================================
-
+    sources = []
     try:
+        chunks = response.candidates[0].grounding_metadata.grounding_chunks or []
+        for chunk in chunks:
+            web = getattr(chunk, "web", None)
+            if web and getattr(web, "uri", None):
+                sources.append({
+                    "title": getattr(web, "title", "") or "",
+                    "url": web.uri
+                })
+    except Exception:
+        pass
 
-        async with httpx.AsyncClient(
-            timeout=120
-        ) as client:
-
-            response = await client.post(
-                OLLAMA_URL,
-                json=body
-            )
-
-            response.raise_for_status()
-
-            result = response.json()
-
-            return json.loads(
-                result["response"]
-            )
-
-    except Exception as error:
-
-        print(
-            f"LLM unavailable: {error}"
-        )
-
-        return fallback_insight(
-            payload
-        )
+    return {"insights": parsed.model_dump(), "sources": sources}
