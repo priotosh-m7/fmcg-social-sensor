@@ -1,54 +1,97 @@
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
+
+class SocialCreative(BaseModel):
+    headline: str
+    body_copy: str
+    cta: str
+    hashtags: List[str]
+
+
+class SocialImage(BaseModel):
+    image_url: str
+
+
+class PublishSocialPostRequest(BaseModel):
+    brand: str
+    category: str
+    format: str = "Instagram Post"
+    creative: SocialCreative
+    image: SocialImage
+    scheduled_at: Optional[str] = None
+
+class PublishSocialPostRequest(BaseModel):
+    brand: str
+    category: str
+    format: str = "Instagram Post"
+    creative: SocialCreative
+    image: SocialImage
+    scheduled_at: Optional[str] = None
+
 class SensorRequest(BaseModel):
-    """
-    User input for the FMCG Social Sensor.
-    The sensor discovers trends, events and conversations automatically.
-    """
+    brand: str = Field(..., min_length=1)
+    category: str = Field(..., min_length=1)
+    market: str = "India"
+    language: str = "en"
+    lookback_days: int = Field(default=7, ge=1, le=30)
 
-    brand: str = Field(
-        ...,
-        min_length=1,
-        description="Brand to monitor"
-    )
+class Opportunity(BaseModel):
+    rank: int
+    trend: str
+    what_is_happening: str
+    consumer_relevance: str
+    brand_connection: str
+    opportunity_score: float
+    urgency: str
+    confidence: str
+    timing: str
+    evidence: List[str]
 
-    category: str = Field(
-        ...,
-        min_length=1,
-        description="Product category"
-    )
+class SensorOutput(BaseModel):
+    summary: str
+    opportunities: List[Opportunity]
+    overall_assessment: str
 
-    market: str = Field(
-        default="India",
-        description="Market to monitor"
-    )
-
-    language: str = Field(
-        default="en",
-        description="Language of monitored content"
-    )
-
-    lookback_days: int = Field(
-        default=7,
-        ge=1,
-        le=30,
-        description="Number of days of historical content to analyze"
-    )
+class CreativeInsight(BaseModel):
+    trend: str
+    what_is_happening: str
+    consumer_relevance: str
+    brand_connection: str
+    opportunity_score: float
+    urgency: str
+    confidence: str
 
 
-class Article(BaseModel):
-    """
-    Standardized article structure used internally
-    by the Social Sensor.
-    """
+class CreativeRequest(BaseModel):
+    rank: int
+    trend: str
+    what_is_happening: str
+    consumer_relevance: str
+    brand_connection: str
+    opportunity_score: float
+    urgency: str
+    confidence: str
+    timing: str
+    evidence: List[str]
 
-    source: str = ""
+    brand: str
+    category: str
+    market: str = "India"
+    format: str = "Instagram Post"
+    objective: str = "Brand awareness"
 
-    title: str = ""
 
-    description: str = ""
+class CreativeOutput(BaseModel):
+    headline: str
+    body_copy: str
+    cta: str
+    hashtags: List[str]
+    creative_direction: str
+    visual_prompt: str
 
-    url: str = ""
-
-    published_at: str = ""
+class ImageRequest(BaseModel):
+    brand: str
+    category: str
+    visual_prompt: str
