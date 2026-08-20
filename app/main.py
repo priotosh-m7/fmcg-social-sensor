@@ -12,11 +12,7 @@ app = FastAPI(
     title="FMCG Social Sensor",
     version="2.0.0"
 )
-app.mount(
-    "/generated",
-    StaticFiles(directory="generated"),
-    name="generated"
-)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
