@@ -33,7 +33,7 @@ Requirements:
     image_bytes = await generate_image(prompt)
 
     output_dir = "generated"
-    os.makedirs(output_dir, exist_ok=True)
+   
 
     filename = f"{uuid.uuid4().hex}.png"
         # Upload directly to Cloudinary
